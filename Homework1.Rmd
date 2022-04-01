@@ -1,0 +1,76 @@
+---
+title: "Homework1"
+author: "Allen Wang"
+date: '2022-03-31'
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: show
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE,
+                      warning = FALSE)
+```
+# Machine Learning Main Idea 
+
+## Question 1
+Supervised learning: Situation when for each observation of the predictor measurements $x_i, i = 1,2,...n$ there is an associated response measurement $y_i$.
+Unsupervised learning: situation when for every observation $i=1,...,n$, we observe a vector of measurements $x_i$ but no associated response $y_i$.  
+The difference is that whether there is a **response variable** or not.
+
+## Question 2
+Regression model is used when the response variable is quantitative; classification model is used when the response variable is qualitative. 
+
+## Question 3 
+
+
+## Question 4
+Descriptive model is used to best visually emphasize a trend in data.  
+Predictive model aims to predict $Y$ with minimum reducible error. It does not focus on hypothesis tests.  
+Inferential model aims to test theories and causal claims, such as relationship between outcomes and predictors.
+
+## Question 5 
+
+
+## Question 6 
+Predictive: the model should try to predict the binary response variable vote, which is Yes or not, based on the voter's data(predictor variables).  
+
+Inferential: we are expected to find the relationship between the likelihood of support for the candidate and the personal contact with the candidate. A possible causal theory is tested, and the personal contact should stand out as a feature relating to voting preference.
+
+# Exploratory Data Analysis
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+hist(mpg$hwy,main="Histogram of highway miles per gallon",
+     xlab = "Highway Miles per Gallon(hwy)")
+```
+
+```{r,eval=TRUE, echo=TRUE, include=TRUE}
+ggplot(mpg, aes(x=hwy, y=cty)) + geom_point()+labs(title="hwy vs. cty")
+```
+
+```{r}
+library(forcats)
+mpg %>%
+  ggplot(aes(x=fct_infreq(manufacturer))) + geom_bar() +
+  coord_flip()
+```
+
+```{r}
+ggplot(mpg, aes(x=as.character(cyl), y=hwy)) + 
+  stat_boxplot(geom = "errorbar", width = 0.25) +
+  geom_boxplot() + labs(x="cyl")
+
+```
+
+```{r}
+library(corrplot)
+mpg_numeric <- mpg %>% 
+  select(displ,year, cyl, hwy, cty)
+M = cor(mpg_numeric)
+corrplot(M, method = 'number',order = 'FPC', type = 'lower', diag = FALSE)
+```
+
