@@ -84,6 +84,8 @@ ggplot(mpg, aes(x=as.character(cyl), y=hwy)) +
 
 Yes, I see a pattern. As cyl increases, there is a pattern that the average of hwy decreases. 
 
+
+## Question 5
 ```{r}
 library(corrplot)
 library(dplyr)
