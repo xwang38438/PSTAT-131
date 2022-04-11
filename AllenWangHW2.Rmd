@@ -1,30 +1,214 @@
 ---
-title: "AllenWang_131HW2"
-author: "Allen Wang"
-date: '2022-04-08'
-output: pdf_document
+title: "Homework 2"
+author: "PSTAT 131/231"
+output:
+    html_document:
+      toc: true
+      toc_float: true
+      code_folding: show
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, message = FALSE,
+                      warning = FALSE)
 ```
 
-## R Markdown
+## Linear Regression
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+For this lab, we will be working with a data set from the UCI (University of California, Irvine) Machine Learning repository ([see website here](http://archive.ics.uci.edu/ml/datasets/Abalone)). The full data set consists of $4,177$ observations of abalone in Tasmania. (Fun fact: [Tasmania](https://en.wikipedia.org/wiki/Tasmania "Tasmania") supplies about $25\%$ of the yearly world abalone harvest.)
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+![*Fig 1. Inside of an abalone shell.*](https://cdn.shopify.com/s/files/1/1198/8002/products/1d89434927bffb6fd1786c19c2d921fb_2000x_652a2391-5a0a-4f10-966c-f759dc08635c_1024x1024.jpg?v=1582320404){width="152"}
 
-```{r cars}
-summary(cars)
+The age of an abalone is typically determined by cutting the shell open and counting the number of rings with a microscope. The purpose of this data set is to determine whether abalone age (**number of rings + 1.5**) can be accurately predicted using other, easier-to-obtain information about the abalone.
+
+The full abalone data set is located in the `\data` subdirectory. Read it into *R* using `read_csv()`. Take a moment to read through the codebook (`abalone_codebook.txt`) and familiarize yourself with the variable definitions.
+
+Make sure you load the `tidyverse` and `tidymodels`!
+
+```{r include=FALSE}
+library(tidyverse)
+library(tidymodels)
+library(dplyr)
 ```
 
-## Including Plots
 
-You can also embed plots, for example:
+### Question 1
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+Your goal is to predict abalone age, which is calculated as the number of rings plus 1.5. Notice there currently is no `age` variable in the data set. Add `age` to the data set.
+
+```{r}
+abalone = read.csv("abalone.csv")
+abalone = abalone %>% mutate(age = rings + 1.5) %>% select(age, everything())
+hist(abalone$age, breaks = 30, main = "Histogram of Age", xlab = "Age")
+```
+Assess and describe the distribution of `age`.
+
+The distribution of Abalone's age is right skewed, like a poisson distribution. Most abalones' ages clusters in the range of $[5,15]$
+
+### Question 2
+
+Split the abalone data into a training set and a testing set. Use stratified sampling. You should decide on appropriate percentages for splitting the data.
+
+*Remember that you'll need to set a seed at the beginning of the document to reproduce your results.*
+
+Question: how to decide the appropriate percentages. 
+```{r}
+set.seed(3)
+abalone_split = initial_split(abalone, prop = 0.80, strata = age)
+abalone_train = training(abalone_split)
+abalone_test = testing(abalone_split)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+### Question 3
+
+Using the **training** data, create a recipe predicting the outcome variable, `age`, with all other predictor variables. Note that you should not include `rings` to predict `age`. Explain why you shouldn't use `rings` to predict `age`.
+
+**Solution:** rings will be too strong to predict age (age = rings + 1.5), so it will overshadow the influence of other predictor variables. In other words, the parameters for other predictor variables will be close to 0.
+
+Steps for your recipe:
+
+1.  dummy code any categorical predictors
+
+
+2.  create interactions between
+
+    -   `type` and `shucked_weight`,
+    -   `longest_shell` and `diameter`,
+    -   `shucked_weight` and `shell_weight`
+
+3.  center all predictors, and
+
+4.  scale all predictors.
+
+You'll need to investigate the `tidymodels` documentation to find the appropriate step functions to use.
+```{r}
+abalone_train_norings = abalone_train[,1:9]
+abalone_train_norings
+```
+
+
+```{r echo=TRUE, message=TRUE}
+abalone_recipe = recipe(age ~ ., data = abalone_train_norings) %>%
+  step_dummy(all_nominal_predictors()) %>% # dummy code for categorical variables
+  step_interact(~ longest_shell:diameter) %>% 
+  step_interact(~ shucked_weight:shell_weight) %>% 
+  #step_interact(~ type:shucked_weight) %>%
+  step_interact(~ type_I:shucked_weight + type_M:shucked_weight) %>%
+  step_normalize(all_predictors()) %>%
+  prep(abalone_train_norings)
+  #step_interact(~ shucked_weight:shell_weight) %>%  
+  #step_interact(~ type:shucked_weight) %>%# create interactions
+  #step_normalize(all_predictors())   # center and scale 
+
+summary(abalone_recipe)
+```
+### Question 4
+
+Create and store a linear regression object using the `"lm"` engine.
+
+```{r}
+lm_model <- linear_reg() %>%
+  set_mode("regression") %>%
+  set_engine("lm")
+```
+
+
+### Question 5
+
+Now:
+
+1.  set up an empty workflow,
+2.  add the model you created in Question 4, and
+3.  add the recipe that you created in Question 3.
+
+```{r}
+lm_wflow <- workflow() %>% 
+  add_model(lm_model) %>% 
+  add_recipe(abalone_recipe)
+```
+
+
+### Question 6
+
+Use your `fit()` object to predict the age of a hypothetical female abalone with longest_shell = 0.50, diameter = 0.10, height = 0.30, whole_weight = 4, shucked_weight = 1, viscera_weight = 2, shell_weight = 1.
+
+```{r}
+abalone_train_norings$type = as.numeric(abalone_train_norings$type)
+
+lm_fit <- fit(lm_wflow, abalone_train_norings)
+para = lm_fit %>% 
+  # This returns the parsnip object:
+  extract_fit_parsnip() %>% 
+  # Now tidy the linear model object:
+  tidy() 
+para
+# something is wrong with this step as some predictors are lost 
+
+```
+```{r}
+sb = data.frame(type = 1,longest_shell = 0.50, diameter = 0.10, height = 0.30, whole_weight = 4, shucked_weight = 1, viscera_weight = 2, shell_weight = 1)
+predict(lm_fit,sb)
+```
+
+### Question 7
+
+Now you want to assess your model's performance. To do this, use the `yardstick` package:
+
+```{r message=FALSE}
+library(yardstick)
+```
+
+1.  Create a metric set that includes *R^2^*, RMSE (root mean squared error), and MAE (mean absolute error).
+
+2.  Use `predict()` and `bind_cols()` to create a tibble of your model's predicted values from the **training data** along with the actual observed ages (these are needed to assess your model's performance).
+
+3.  Finally, apply your metric set to the tibble, report the results, and interpret the *R^2^* value.
+
+```{r}
+abalone_train_res <- predict(lm_fit, new_data = abalone_train_norings %>% select(-age))
+abalone_train_res %>% 
+  head()
+```
+```{r}
+abalone_train_res <- bind_cols(abalone_train_res, abalone_train_norings %>% select(age))
+abalone_train_res %>% 
+  head()
+```
+```{r}
+abalone_metrics <- metric_set(rmse, rsq, mae)
+abalone_metrics(abalone_train_res, truth = age, estimate = .pred)
+```
+
+It seems that the percent of variability that can be explained by the predictor variables is not very high. 
+
+### Required for 231 Students
+
+In lecture, we presented the general bias-variance tradeoff, which takes the form:
+
+$$
+E[(y_0 - \hat{f}(x_0))^2]=Var(\hat{f}(x_0))+[Bias(\hat{f}(x_0))]^2+Var(\epsilon)
+$$
+
+where the underlying model $Y=f(X)+\epsilon$ satisfies the following:
+
+- $\epsilon$ is a zero-mean random noise term and $X$ is non-random (all randomness in $Y$ comes from $\epsilon$);
+- $(x_0, y_0)$ represents a test observation, independent of the training set, drawn from the same model;
+- $\hat{f}(.)$ is the estimate of $f$ obtained from the training set.
+
+#### Question 8
+
+Which term(s) in the bias-variance tradeoff above represent the reproducible error? Which term(s) represent the irreducible error?
+
+#### Question 9
+
+Using the bias-variance tradeoff above, demonstrate that the expected test error is always at least as large as the irreducible error.
+
+#### Question 10
+
+Prove the bias-variance tradeoff.
+
+Hints:
+
+- use the definition of $Bias(\hat{f}(x_0))=E[\hat{f}(x_0)]-f(x_0)$;
+- reorganize terms in the expected test error by adding and subtracting $E[\hat{f}(x_0)]$
