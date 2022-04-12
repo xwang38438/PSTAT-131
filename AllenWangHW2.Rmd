@@ -84,22 +84,21 @@ Steps for your recipe:
 You'll need to investigate the `tidymodels` documentation to find the appropriate step functions to use.
 ```{r}
 abalone_train_norings = abalone_train[,1:9]
-abalone_train_norings
+abalone_train_1 <- abalone_train_norings %>% mutate(type_I = if_else(type == "I",1,0)) %>% 
+  mutate(type_M = ifelse(type == "M",1,0)) %>% select(-type)
+head(abalone_train_1)
 ```
 
 
 ```{r echo=TRUE, message=TRUE}
-abalone_recipe = recipe(age ~ ., data = abalone_train_norings) %>%
+abalone_recipe = recipe(age ~ ., data = abalone_train_1) %>%
   step_dummy(all_nominal_predictors()) %>% # dummy code for categorical variables
   step_interact(~ longest_shell:diameter) %>% 
   step_interact(~ shucked_weight:shell_weight) %>% 
-  #step_interact(~ type:shucked_weight) %>%
-  step_interact(~ type_I:shucked_weight + type_M:shucked_weight) %>%
+  step_interact(~ type_I:shucked_weight) %>%
+  step_interact(~ type_M:shucked_weight) %>%
   step_normalize(all_predictors()) %>%
-  prep(abalone_train_norings)
-  #step_interact(~ shucked_weight:shell_weight) %>%  
-  #step_interact(~ type:shucked_weight) %>%# create interactions
-  #step_normalize(all_predictors())   # center and scale 
+  prep()
 
 summary(abalone_recipe)
 ```
@@ -134,9 +133,13 @@ lm_wflow <- workflow() %>%
 Use your `fit()` object to predict the age of a hypothetical female abalone with longest_shell = 0.50, diameter = 0.10, height = 0.30, whole_weight = 4, shucked_weight = 1, viscera_weight = 2, shell_weight = 1.
 
 ```{r}
-abalone_train_norings$type = as.numeric(abalone_train_norings$type)
 
-lm_fit <- fit(lm_wflow, abalone_train_norings)
+```
+
+
+```{r}
+
+lm_fit <- fit(lm_wflow, abalone_train_1)
 para = lm_fit %>% 
   # This returns the parsnip object:
   extract_fit_parsnip() %>% 
@@ -147,7 +150,7 @@ para
 
 ```
 ```{r}
-sb = data.frame(type = 1,longest_shell = 0.50, diameter = 0.10, height = 0.30, whole_weight = 4, shucked_weight = 1, viscera_weight = 2, shell_weight = 1)
+sb = data.frame(type_I = 0, type_M = 0, longest_shell = 0.50, diameter = 0.10, height = 0.30, whole_weight = 4, shucked_weight = 1, viscera_weight = 2, shell_weight = 1)
 predict(lm_fit,sb)
 ```
 
@@ -166,12 +169,12 @@ library(yardstick)
 3.  Finally, apply your metric set to the tibble, report the results, and interpret the *R^2^* value.
 
 ```{r}
-abalone_train_res <- predict(lm_fit, new_data = abalone_train_norings %>% select(-age))
+abalone_train_res <- predict(lm_fit, new_data = abalone_train_1 %>% select(-age))
 abalone_train_res %>% 
   head()
 ```
 ```{r}
-abalone_train_res <- bind_cols(abalone_train_res, abalone_train_norings %>% select(age))
+abalone_train_res <- bind_cols(abalone_train_res, abalone_train_1 %>% select(age))
 abalone_train_res %>% 
   head()
 ```
