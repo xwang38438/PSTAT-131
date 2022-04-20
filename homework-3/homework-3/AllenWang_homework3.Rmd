@@ -278,5 +278,11 @@ augment(log_fit, new_data = survived_test) %>%
 augment(log_fit, new_data = survived_test) %>%
   roc(survived, .pred_Yes)
 ```
+```{r}
+augment(log_fit, new_data = survived_test) %>%
+  conf_mat(truth = survived, estimate = .pred_class) %>%
+  autoplot(type = "heatmap")
+```
+
 
 Therefore, AUC is 0.88. The test accuracy of Logistic Regression is 0.8321 and the train accuracy is 0.8138, and they are quite similar to each other. It is surprised that test accuracy is higher. It maybe related to the splitting process where I set the ratio too high.
