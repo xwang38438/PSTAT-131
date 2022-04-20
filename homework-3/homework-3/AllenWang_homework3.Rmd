@@ -233,6 +233,16 @@ Now you've fit four different models to your training data.
 Use `predict()` and `bind_cols()` to generate predictions using each of these 4 models and your **training** data. Then use the *accuracy* metric to assess the performance of each of the four models.
 
 ```{r}
+pred_models = bind_cols(predict(log_fit, survived_test), 
+                    predict(nb_fit, survived_test),
+                    predict(qda_fit, survived_test),
+                    predict(lda_fit, survived_test))
+colnames(pred_models) = c("log_pred","nb_pred","qda_pred", "lda_pred")
+head(pred_models)
+```
+
+
+```{r}
 accuracies <- c(log_reg_acc$.estimate, lda_acc$.estimate, 
                 nb_acc$.estimate, qda_acc$.estimate)
 models <- c("Logistic Regression", "LDA", "Naive Bayes", "QDA")
