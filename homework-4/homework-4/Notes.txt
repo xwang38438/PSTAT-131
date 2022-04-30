@@ -1,0 +1,19 @@
+1. training and testing split (model selection only on training set)
+2. fit M on training set 
+3. predict on the test set 
+4. calculate the test error 
+
+
+
+Cross Validation 
+1. 5-fold cv
+2. for i = 1 to 5 
+	Gi as the validation set 
+	Gi/neqj as the training set
+	validation error rate ei
+3. cv error raten: e = 1/5 * \sum_1^5 e_i 
+
+
+
+
+avoid overfitting
