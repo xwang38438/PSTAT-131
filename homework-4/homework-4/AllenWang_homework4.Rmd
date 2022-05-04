@@ -2,10 +2,12 @@
 title: "Homework 4"
 author: "PSTAT 131/231"
 output:
-    html_document:
-      toc: true
-      toc_float: true
-      code_folding: show
+  pdf_document:
+    toc: yes
+  html_document:
+    toc: yes
+    toc_float: yes
+    code_folding: show
 ---
 
 ```{r setup, include=FALSE}
@@ -76,7 +78,7 @@ Fold the **training** data. Use *k*-fold cross-validation, with $k = 10$.
 
 ```{r}
 survived_fold = vfold_cv(survived_train, v=10)
-class(survived_fold)
+survived_fold
 ```
 
 
@@ -85,10 +87,10 @@ class(survived_fold)
 In your own words, explain what we are doing in Question 2. What is *k*-fold cross-validation? Why should we use it, rather than simply fitting and testing models on the entire training set? If we **did** use the entire training set, what resampling method would that be?
 
 
-Solution:  
+**Solution: ** 
 We separate the training set into k exclusive subsets with equal sizes, then we hold out $1^{st}$ subset as the validation set and fit the model on the remaining $k-1$ subsets. After that, we get $MSE$ in the first subset. Conclusively, we repeat this process $k$ times for each subset to get different $MSE$, so that we can calculate their average $MSE$.
 
-We use this method since we can well utilize the training set to get a reasonable $MSE$. Since the estimate of test $MSE$ is highly variable and depends on training set, only fitting the entire training set may lead to an overestimate of the test $MSE$. This is called **A Validation Set Approach**.
+We use this method since we can well utilize the training set to get a reasonable $MSE$. Also, cross-validation deals with the variation of test $MSE$ by showing the mean of all folds. Since the estimate of test $MSE$ is highly variable and depends on training set, only fitting the entire training set may lead to an overestimate of the test $MSE$. This is called **A Validation Set Approach**.
 
 ### Question 4
 
@@ -135,7 +137,7 @@ qda_wkflow <- workflow() %>%
 How many models, total, across all folds, will you be fitting to the data? To answer, think about how many folds there are, and how many models you'll fit to each fold.
 
 Solution:  
-For a single model, we have 10 folds and we fit each fold with the model 9 times because each fold has to be the validation fold once. Since we have three models to train, our calculation shold be $10 \times 9 \times 3 = 270$.
+For a single model, we have 10 folds and we fit once as each fold being a validation set. Since we have three models to train, our calculation should be $10 \times 3 = 30$.
 
 
 ### Question 5
@@ -182,9 +184,7 @@ collect_metrics(qda_res)
 
 Decide which of the 3 fitted models has performed the best. Explain why. *(Note: You should consider both the mean accuracy and its standard error.)*
 
-Solution:  I should probably use logistic regression model
-
-
+**Solution: ** Logistic regression has the largest accuracy 0.815. Since the standard deviation of each model is close and stands around 0.01, we can determine to choose logistic regression as the best fitted model.
 
 ### Question 7
 
