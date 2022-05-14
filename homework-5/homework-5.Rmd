@@ -30,6 +30,10 @@ Read in the file and familiarize yourself with the variables using `pokemon_code
 ```{r}
 library(ggplot2)
 library(dplyr)
+library(tidyverse)
+library(tidymodels)
+library(glmnet)
+tidymodels_prefer()
 ```
 
 
@@ -41,12 +45,15 @@ Install and load the `janitor` package. Use its `clean_names()` function on the 
 library(janitor)
 
 Pokemon <- read_csv("D:/UCSB/Spring_2022/PSTAT 131/PSTAT_131_HW/HW2/PSTAT-131/homework-5/data/Pokemon.csv")
-
 Pokemon = clean_names(Pokemon)
 ```
 Resulting names are unique and consist only of the _ character, numbers, and letters. Capitalization preferences can be specified using the case parameter.
 
 It set up a rule for variable names in the data frame, like the camel rule in C++. This standardization can reduce confusion in the later analysis.
+
+```{r}
+Pokemon
+```
 
 
 ### Exercise 2
@@ -77,7 +84,12 @@ Pokemon_ra = Pokemon %>% filter(type_1 == "Bug" | type_1 == "Fire" |
 After filtering, convert `type_1` and `legendary` to factors.
 
 ```{r}
+Pokemon_ra = Pokemon_ra %>% 
+  mutate(legendary = as.factor(legendary)) %>%
+  mutate(type_1 = factor(type_1))
 
+class(Pokemon_ra$legendary)
+class(Pokemon_ra$type_1)
 ```
 
 
@@ -85,7 +97,24 @@ After filtering, convert `type_1` and `legendary` to factors.
 
 Perform an initial split of the data. Stratify by the outcome variable. You can choose a proportion to use. Verify that your training and test sets have the desired number of observations.
 
+```{r}
+Pokemon_ra_split = initial_split(Pokemon_ra, prop=0.8, strata = type_1)
+typeI_train = training(Pokemon_ra_split)
+typeI_test = testing(Pokemon_ra_split)
+
+dim(typeI_train)
+dim(typeI_test)
+```
+
+
 Next, use *v*-fold cross-validation on the training set. Use 5 folds. Stratify the folds by `type_1` as well. *Hint: Look for a `strata` argument.* Why might stratifying the folds be useful?
+
+```{r}
+typeI_fold = vfold_cv(typeI_train, v=5, strata = type_1)
+typeI_fold
+```
+
+**Solution: **A variable in data (single character or name) used to conduct stratified sampling. When not NULL, each resample is created within the stratification variable. Numeric strata are binned into quartiles.
 
 ### Exercise 4
 
@@ -95,6 +124,15 @@ Set up a recipe to predict `type_1` with `legendary`, `generation`, `sp_atk`, `a
 
 - Center and scale all predictors.
 
+```{r}
+typeI_recipe = recipe(type_1 ~ legendary + generation + sp_atk + 
+                      attack +  speed + defense + hp + sp_def,
+                      data = typeI_train) %>%
+  step_dummy(all_nominal_predictors()) %>% 
+  step_normalize(all_predictors())
+```
+
+
 ### Exercise 5
 
 We'll be fitting and tuning an elastic net, tuning `penalty` and `mixture` (use `multinom_reg` with the `glmnet` engine).
@@ -103,21 +141,88 @@ Set up this model and workflow. Create a regular grid for `penalty` and `mixture
 
 How many total models will you be fitting when you fit these models to your folded data?
 
+$10 \times 10 \times 5$
+
+```{r}
+ridge_spec = multinom_reg(penalty = tune(), mixture = tune()) %>%
+  set_engine("glmnet")
+```
+
+
+```{r}
+ridge_wkflw = workflow() %>%
+  add_recipe(typeI_recipe) %>%
+  add_model(ridge_spec)
+```
+
+```{r}
+penalty_grid <- grid_regular(penalty(range = c(-5, 5)),
+                             mixture(range = c(0,1)), 
+                             levels = c(mixture = 10, penalty = 10))
+penalty_grid
+```
+
 ### Exercise 6
 
 Fit the models to your folded data using `tune_grid()`.
 
 Use `autoplot()` on the results. What do you notice? Do larger or smaller values of `penalty` and `mixture` produce better accuracy and ROC AUC?
 
+
+```{r}
+tune_res <- tune_grid(
+  ridge_wkflw,
+  resamples = typeI_fold, 
+  grid = penalty_grid
+)
+
+autoplot(tune_res)
+```
+
+**Solution: ** At the beginning, the accuracy remains high as the penalty increases, but it suddenly decreases when the penalty reaches the fifth level. Different values of mixture means different rates of decreasing. From the graph, smaller penalty and higher mixture produces better accuracy and ROC_AUC.
+
+
 ### Exercise 7
 
 Use `select_best()` to choose the model that has the optimal `roc_auc`. Then use `finalize_workflow()`, `fit()`, and `augment()` to fit the model to the training set and evaluate its performance on the testing set.
+
+```{r}
+best_mod = select_best(tune_res, metric = "roc_auc")
+best_mod
+
+final = finalize_workflow(ridge_wkflw, best_mod)
+final_fit = fit(final, data = typeI_train)
+
+
+final_test = augment(final_fit, new_data = typeI_test)
+
+```
+
 
 ### Exercise 8
 
 Calculate the overall ROC AUC on the testing set.
 
+```{r}
+final_test %>% accuracy(truth = type_1, estimate = .pred_class)
+```
+
 Then create plots of the different ROC curves, one per level of the outcome. Also make a heat map of the confusion matrix.
+
+```{r}
+final_test %>% roc_curve(type_1, ) %>%
+autoplot()
+```
+
+
+```{r}
+final_test %>%
+conf_mat(truth = type_1, estimate = .pred_class) %>%
+autoplot(type = "heatmap")
+
+```
+
+
 
 What do you notice? How did your model do? Which Pokemon types is the model best at predicting, and which is it worst at? Do you have any ideas why this might be?
 
