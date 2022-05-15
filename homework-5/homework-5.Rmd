@@ -2,10 +2,12 @@
 title: "Homework 5"
 author: "PSTAT 131/231"
 output:
-    html_document:
-      toc: true
-      toc_float: true
-      code_folding: show
+  pdf_document:
+    toc: yes
+  html_document:
+    toc: yes
+    toc_float: yes
+    code_folding: show
 ---
 
 ```{r setup, include=FALSE}
@@ -27,7 +29,7 @@ The goal of this assignment is to build a statistical learning model that can pr
 
 Read in the file and familiarize yourself with the variables using `pokemon_codebook.txt`.
 
-```{r}
+```{r include=FALSE}
 library(ggplot2)
 library(dplyr)
 library(tidyverse)
@@ -47,12 +49,10 @@ library(janitor)
 Pokemon <- read_csv("D:/UCSB/Spring_2022/PSTAT 131/PSTAT_131_HW/HW2/PSTAT-131/homework-5/data/Pokemon.csv")
 Pokemon = clean_names(Pokemon)
 ```
-Resulting names are unique and consist only of the _ character, numbers, and letters. Capitalization preferences can be specified using the case parameter.
-
-It set up a rule for variable names in the data frame, like the camel rule in C++. This standardization can reduce confusion in the later analysis.
+**Solution: ** Resulting names are unique and consist only of the _ character, numbers, and letters. Capitalization preferences can be specified using the case parameter. It standardizes the naming of column names so it can reduce confusion in the later analysis.
 
 ```{r}
-Pokemon
+colnames(Pokemon)
 ```
 
 
@@ -62,7 +62,7 @@ Using the entire data set, create a bar chart of the outcome variable, `type_1`.
 
 ```{r}
 ggplot(Pokemon, aes(type_1))+
-  geom_bar( width=0.7, fill="steelblue") +
+  geom_bar( width=0.75, fill="steelblue") +
   theme_minimal()
 ```
 
@@ -70,6 +70,7 @@ ggplot(Pokemon, aes(type_1))+
 How many classes of the outcome are there? Are there any Pokémon types with very few Pokémon? If so, which ones?
 
 **Solution: **There are 18 classes of outcomes. The flying type has very few Pokemons. 
+
 
 For this assignment, we'll handle the rarer classes by simply filtering them out. Filter the entire data set to contain only Pokémon whose `type_1` is Bug, Fire, Grass, Normal, Water, or Psychic.
 
@@ -86,7 +87,7 @@ After filtering, convert `type_1` and `legendary` to factors.
 ```{r}
 Pokemon_ra = Pokemon_ra %>% 
   mutate(legendary = as.factor(legendary)) %>%
-  mutate(type_1 = factor(type_1))
+  mutate(type_1 = as.factor(type_1))
 
 class(Pokemon_ra$legendary)
 class(Pokemon_ra$type_1)
@@ -98,7 +99,7 @@ class(Pokemon_ra$type_1)
 Perform an initial split of the data. Stratify by the outcome variable. You can choose a proportion to use. Verify that your training and test sets have the desired number of observations.
 
 ```{r}
-Pokemon_ra_split = initial_split(Pokemon_ra, prop=0.8, strata = type_1)
+Pokemon_ra_split = initial_split(Pokemon_ra, prop=0.7, strata = type_1)
 typeI_train = training(Pokemon_ra_split)
 typeI_test = testing(Pokemon_ra_split)
 
@@ -109,12 +110,13 @@ dim(typeI_test)
 
 Next, use *v*-fold cross-validation on the training set. Use 5 folds. Stratify the folds by `type_1` as well. *Hint: Look for a `strata` argument.* Why might stratifying the folds be useful?
 
+**Solution: **With a strata argument, the random sampling is conducted within the stratification variable. This can help ensure that the resamples have equivalent proportions as the original data set. For a categorical variable, sampling is conducted separately within each class. 
+
 ```{r}
 typeI_fold = vfold_cv(typeI_train, v=5, strata = type_1)
 typeI_fold
 ```
 
-**Solution: **A variable in data (single character or name) used to conduct stratified sampling. When not NULL, each resample is created within the stratification variable. Numeric strata are binned into quartiles.
 
 ### Exercise 4
 
@@ -141,8 +143,7 @@ Set up this model and workflow. Create a regular grid for `penalty` and `mixture
 
 How many total models will you be fitting when you fit these models to your folded data?
 
-$10 \times 10 \times 5$
-
+**Solution: ** $10 \times 10 \times 5 = 500$ since we have 100 choices for regularization and 5 folds. 
 ```{r}
 ridge_spec = multinom_reg(penalty = tune(), mixture = tune()) %>%
   set_engine("glmnet")
@@ -150,6 +151,7 @@ ridge_spec = multinom_reg(penalty = tune(), mixture = tune()) %>%
 
 
 ```{r}
+# actually mean ridge to lasso 
 ridge_wkflw = workflow() %>%
   add_recipe(typeI_recipe) %>%
   add_model(ridge_spec)
@@ -179,7 +181,7 @@ tune_res <- tune_grid(
 autoplot(tune_res)
 ```
 
-**Solution: ** At the beginning, the accuracy remains high as the penalty increases, but it suddenly decreases when the penalty reaches the fifth level. Different values of mixture means different rates of decreasing. From the graph, smaller penalty and higher mixture produces better accuracy and ROC_AUC.
+**Solution: ** At the beginning, the accuracy remains high as the penalty increases, but it suddenly decreases when the penalty reaches the fifth level. Different values of mixture means different rates of decreasing. From the graph, smaller penalty and middle mixture produces better accuracy and ROC_AUC.
 
 
 ### Exercise 7
@@ -188,7 +190,7 @@ Use `select_best()` to choose the model that has the optimal `roc_auc`. Then use
 
 ```{r}
 best_mod = select_best(tune_res, metric = "roc_auc")
-best_mod
+best_mod # showing the best penalty and mixture 
 
 final = finalize_workflow(ridge_wkflw, best_mod)
 final_fit = fit(final, data = typeI_train)
@@ -209,22 +211,29 @@ final_test %>% accuracy(truth = type_1, estimate = .pred_class)
 
 Then create plots of the different ROC curves, one per level of the outcome. Also make a heat map of the confusion matrix.
 
+
 ```{r}
-final_test %>% roc_curve(type_1, ) %>%
-autoplot()
+# roc curve
+final_test %>% roc_curve(type_1, .pred_Bug:.pred_Water) %>%
+  autoplot()
 ```
 
 
 ```{r}
+# heatmap 
 final_test %>%
 conf_mat(truth = type_1, estimate = .pred_class) %>%
 autoplot(type = "heatmap")
-
 ```
 
-
+```{r}
+final_test
+```
 
 What do you notice? How did your model do? Which Pokemon types is the model best at predicting, and which is it worst at? Do you have any ideas why this might be?
+
+**Solution: ** From the testing set, the model does not perform well since the accuracy is less than 0.5. Also, the prediction of each Pokemon type does not follow a similar pattern. The model is best at predicting _Normal_, and the worst at _Grass_ after considering confusion matrix and roc curve. Possible explanation is that the model can not derive numerical features of a specific type due to lack of data and similarity between certain types. Also, we can increase the number of folds for cross-validation. On the other hand, we should try other models to reduce overfitting.              
+
 
 ## For 231 Students
 
