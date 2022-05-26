@@ -1,0 +1,115 @@
+---
+title: "cleaning data"
+author: "Allen Wang"
+date: '2022-05-19'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Importing Unprocessed Data
+I searched for local and national data on [FRED](https://fred.stlouisfed.org/series/PCE)
+
+```{r}
+# loading package 
+library(janitor)
+library(dplyr)
+library(ggplot2)
+library(forecast)
+library(GGally)
+```
+
+
+```{r}
+unprocessed = read.csv("D:/UCSB/Spring_2022/PSTAT 131/PSTAT_131_HW/HW2/PSTAT-131/Final Project/data/unprocessed_data.csv")
+unprocessed = clean_names(unprocessed)
+head(unprocessed)
+```
+
+### Checking Missing values 
+
+Although all variables are supposed to be numeric, but in fact some of them are imported as character variables. Also, we need to deal with missing value in columns contained "PCH" which means "Percent Change".
+
+```{r}
+# delete NA in the first row 
+unprocessed = unprocessed[-1,]
+date = unprocessed[,1]
+
+
+unprocessed = unprocessed[,-1] %>% mutate_if(is.character, as.numeric)
+
+unprocessed$DATE = date
+unprocessed = unprocessed %>%
+  select(DATE, everything())
+
+sapply(unprocessed, function(x) sum(is.na(x)))
+```
+```{r}
+processed_data = unprocessed %>% select(-avg_price_pipedgas_la, -new_patent_ass_la,
+                                     -cpi_allitems_la, -us_interest_rate,
+                                     -economics_cond_index_la) %>% 
+  head(-2)
+
+```
+
+```{r}
+write.csv(processed_data, "D:\\UCSB\\Spring_2022\\PSTAT 131\\PSTAT_131_HW\\HW2\\PSTAT-131\\Final Project\\data\\processed_data.csv", row.names = FALSE)
+```
+
+
+Create ts m
+```{r}
+# start with Feb since we delete the first row of unprocessed data
+processed = ts(unprocessed,frequency = 12, start = c(1990,2)) 
+class(processed)
+```
+One basic criterion for predictor variables is the ability show trend during well-known recession. In other words, my data set can evaluate the economics status of LA county during specific period. Also, by observing our response variable the unemployment rate, we discover that it is cyclical and seasonal. Thus, we may want to include some data that shows a cyclical pattern. 
+
+
+```{r}
+autoplot.zoo(processed[,"unemploy_rate_la"])+
+  ggtitle("Unemployment Rate in LA County") +
+  xlab("Year") +
+  ylab("Percentage%")
+```
+What do we observe from this graph?
+1.
+2. 
+3. 
+
+
+### Seasonal graph:
+```{r}
+ggseasonplot(processed[,"unemploy_rate_la"]) +
+  ggtitle("Seasonal Plot of Unemployment Rate in LA County") +
+  xlab("Year") +
+  ylab("Percentage%")
+  
+```
+What you discover from this graph?
+
+
+```{r}
+ggsubseriesplot(processed[,"unemploy_rate_la"]) +
+  ylab("$ million") +
+  ggtitle("Seasonal subseries plot: antidiabetic drug sales")
+```
+```{r}
+gglagplot(window(processed[,"unemploy_rate_la"], start = 2000, end = 2008))
+```
+
+
+### Correlation
+
+```{r}
+GGally::ggpairs(as.data.frame(processed[,2:5]))
+```
+
+### autocorrelation 
+autocorrelation measures the linear relationship between lagged values of a time series
+
+
+
+

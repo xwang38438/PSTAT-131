@@ -1,0 +1,296 @@
+---
+title: "Report_Draft"
+author: "Allen Wang"
+date: '2022-05-26'
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    code_folding: show
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE,
+                      warning = FALSE)
+```
+
+```{r include=FALSE}
+library(modeltime)
+library(tidymodels)
+library(tidyverse)
+library(timetk)
+library(lubridate)
+library(tidycensus)
+library(tidyverse)
+library(dplyr)
+library(tigris)
+library(xts)
+library(forecast)
+library(zoo)
+options(tigris_use_cache = TRUE)
+```
+
+# What is the unemployment rate?
+First, we must know what is the definition of the unemployment rate to understand how it is derived and what factors are related to it. A person is defined as **unemployed** in the United States if they are jobless, but have looked for work in the last four weeks and are available for work. To record unemployed, Government distributes survey to sampling population and predict the entire unemployed number in a broad area. Measuring the unemployment gives us a good overview of the ongoing status of the economy, international competition, technology development, and so on.
+
+The equation of the **Unemployment Rate** is 
+
+$$unemployment \space rate = \frac{unemployed}{labor \space force}\times100$$
+where _labor force_ includes all people age 16 and older who are classified as either employed and unemployed.
+
+In this project, I will focus on analyzing and predicting the unemployment rate in the LA County. 
+
+# Data Cleaning 
+```{r}
+unprocessed = read.csv("D:/UCSB/Spring_2022/PSTAT 131/PSTAT_131_HW/HW2/PSTAT-131/Final Project/data/unprocessed_data.csv")
+head(unprocessed)
+```
+
+Although all variables are supposed to be numeric, but in fact some of them are imported as character variables. Also, we need to deal with missing value in columns contained "PCH" which means "Percent Change".
+
+```{r}
+unprocessed = unprocessed[-1,]
+date = unprocessed[,1]
+
+# delete NA in the first row 
+unprocessed = unprocessed[,-1] %>% mutate_if(is.character, as.numeric)
+
+unprocessed$DATE = date
+unprocessed = unprocessed %>%
+  select(DATE, everything())
+
+# delete variables that have at least 8 missing values 
+processed_data = unprocessed %>% select(-avg_price_pipedgas_la, -new_patent_ass_la,
+                                     -cpi_allitems_la, -us_interest_rate,
+                                     -economics_cond_index_la) %>% 
+  head(-2)
+
+sapply(processed_data, function(x) sum(is.na(x)))
+```
+
+```{r}
+write.csv(processed_data, "D:\\UCSB\\Spring_2022\\PSTAT 131\\PSTAT_131_HW\\HW2\\PSTAT-131\\Final Project\\data\\processed_data.csv", row.names = FALSE)
+```
+
+
+# EDA 
+```{r}
+# start with Feb since we delete the first row of unprocessed data
+processed = ts(unprocessed[,-1],frequency = 12, start = c(1990,2)) 
+
+autoplot.zoo(processed[,"unemploy_rate_la"])+
+  ggtitle("Unemployment Rate in LA County") +
+  xlab("Year") +
+  ylab("Percentage%")
+```
+We discovered that there are a few well-known recession periods from 1990 to now. The collapse of internet bubble, the financial crisis of 2007, and Covid-19 pandemic all matches severe increase of the unemployment rate. We may study how different economics indexes fluctuates during the financial crisis of 2007 which is mainly caused by the mortgage debt.  
+
+
+Now we want to discover the seasonal pattern of the unemployment. Except the fluctuation during the Covid-19 seems abnormal, we discover that the unemployment rate usually peaks in summer. This is a problem requires further research. 
+```{r}
+ggseasonplot(processed[,"unemploy_rate_la"]) +
+  ggtitle("Seasonal Plot of Unemployment Rate in LA County") +
+  xlab("Year") +
+  ylab("Percentage%")
+```
+
+```{r}
+ggsubseriesplot(processed[,"unemploy_rate_la"]) +
+  ylab("$ million") +
+  ggtitle("Seasonal subseries plot: LA Unemployment Rate")
+```
+
+## Spatial Analysis
+
+Net Migration
+```{r}
+census_api_key("7540e4d61b8467521425225cbe8f44f7c1667f9a")
+net_migration <- get_estimates(geography = "county", state = "CA",
+                               variables = "RNETMIG",
+                               year = 2019,
+                               geometry = TRUE,
+                               resolution = "20m") %>%
+  shift_geometry()
+
+order = c("-15 and below", "-15 to -5", "-5 to +5", "+5 to +15", "+15 and up")
+
+net_migration <- net_migration %>%
+  mutate(groups = case_when(
+    value > 15 ~ "+15 and up",
+    value > 5 ~ "+5 to +15",
+    value > -5 ~ "-5 to +5",
+    value > -15 ~ "-15 to -5",
+    TRUE ~ "-15 and below"
+  )) %>%
+  mutate(groups = factor(groups, levels = order))
+
+state_overlay <- states(
+  cb = TRUE,
+  resolution = "20m"
+) %>%
+  filter(GEOID != "72") %>%
+  shift_geometry()
+
+ggplot() +
+  geom_sf(data = net_migration, aes(fill = groups, color = groups), size = 0.1) + 
+  scale_fill_brewer(palette = "PuOr", direction = -1) +
+  scale_color_brewer(palette = "PuOr", direction = -1, guide = FALSE)  +
+  labs(title = "Net migration per 1000 residents in CA",
+       subtitle = "US Census Bureau 2019 Population Estimates",
+       fill = "Rate") +
+  theme_minimal(base_family = "Roboto")
+```
+We found LA county is losing population this 5 years. It requires further discussion how this trend will effect the unemployment rate. 
+
+Median Age  
+```{r, fig.width=6, fig.height=4}
+#median age
+med_age <- get_acs(state = "CA", county = "Los Angeles", geography = "tract", 
+                  variables = "B01002_001", geometry = TRUE)
+med_age %>%
+  ggplot(aes(fill = estimate)) + 
+  geom_sf(color = NA) + 
+  scale_fill_viridis_c(option = "magma")
+```
+
+
+# Building Up Models
+
+## Modeltime model
+```{r}
+model_data = read.csv("D:/UCSB/Spring_2022/PSTAT 131/PSTAT_131_HW/HW2/PSTAT-131/Final Project/data/processed_data.csv")
+```
+
+I first use data from 1990-2016 to test whether these models can only use previous values of the unemployment rate and date to forecast in a satisfactory accuracy. Further, I want to utilize models which consider other economics indicators. Hopefully, I can create models that can first perceive economics situation in the US and then determine the trend of the unemployment rate.  
+
+
+Good forecasts capture the genuine patterns and relationships which exist in the historical data, but do not replicate past events that will not occur again. When forecasting time series data, the aim is to estimate how the sequence of observations will continue into the future. Therefore, the main concern may be only to predict what will happen, not to know why it happens.
+```{r}
+data = model_data %>%
+  select(DATE, unemploy_rate_la) %>% 
+  mutate(DATE, DATE = as.Date.character(DATE))
+
+data = data[1:320,] # I don't want to include pandemic 
+
+data %>%plot_time_series(DATE, unemploy_rate_la)
+```
+
+Splitting the data set and creating the training and testing set
+```{r}
+splits <- initial_time_split(data, prop = 0.9)
+```
+
+```{r include=FALSE}
+# Auto ARIMA
+model_fit_arima_no_boost <- arima_reg() %>%
+    set_engine(engine = "auto_arima") %>%
+    fit(unemploy_rate_la ~ DATE, data = training(splits))
+```
+
+```{r include=FALSE}
+# Boosted Auto ARIMA
+model_fit_arima_boosted <- arima_boost(
+    min_n = 2,
+    learn_rate = 0.015
+) %>%
+    set_engine(engine = "auto_arima_xgboost") %>%
+    fit(unemploy_rate_la ~ DATE + as.numeric(DATE) + factor(month(DATE, label = TRUE), ordered = F),
+        data = training(splits))
+
+```
+
+```{r include=FALSE}
+# Exponential Smoothing
+model_fit_ets <- exp_smoothing() %>%
+    set_engine(engine = "ets") %>%
+    fit(unemploy_rate_la ~ DATE, data = training(splits))
+```
+
+```{r include=FALSE}
+#Prophet 
+model_fit_prophet <- prophet_reg() %>%
+    set_engine(engine = "prophet") %>%
+    fit(unemploy_rate_la ~ DATE, data = training(splits))
+```
+
+```{r include=FALSE}
+# Linear Regression
+model_fit_lm <- linear_reg() %>%
+    set_engine("lm") %>%
+    fit(unemploy_rate_la ~ as.numeric(DATE) + factor(month(DATE, label = TRUE), ordered = FALSE),
+        data = training(splits))
+```
+
+```{r include=FALSE}
+library(earth)
+# Multivariate Adaptive Regression Spline model 
+model_spec_mars <- mars(mode = "regression") %>%
+    set_engine("earth") 
+
+recipe_spec <- recipe(unemploy_rate_la ~ DATE, data = training(splits)) %>%
+    step_date(DATE, features = "month", ordinal = FALSE) %>%
+    step_mutate(date_num = as.numeric(DATE)) %>%
+    step_normalize(date_num) %>%
+    step_rm(DATE)
+  
+wflw_fit_mars <- workflow() %>%
+    add_recipe(recipe_spec) %>%
+    add_model(model_spec_mars) %>%
+    fit(training(splits))
+```
+
+Add fitted models to a Model Table
+```{r}
+models_tbl <- modeltime_table(
+    model_fit_arima_no_boost,
+    model_fit_arima_boosted,
+    model_fit_ets,
+    model_fit_prophet,
+    model_fit_lm,
+    wflw_fit_mars
+)
+
+models_tbl
+```
+Calibrate the model to a testing set 
+
+```{r}
+calibration_tbl <- models_tbl %>%
+    modeltime_calibrate(new_data = testing(splits))
+calibration_tbl
+```
+```{r}
+calibration_tbl %>%
+    modeltime_forecast(
+        new_data    = testing(splits),
+        actual_data = data
+    ) %>%
+    plot_modeltime_forecast(
+      .legend_max_width = 25
+    )
+```
+
+```{r}
+calibration_tbl %>%
+    modeltime_accuracy() %>%
+    table_modeltime_accuracy(
+        .interactive = FALSE
+    )
+```
+It seems that 
+
+1. need to tune hyper-parameter 
+2. need cross validation 
+3. Analyze the ARIMA models  
+  (a) Differencing and White Noise 
+  (b) acf() and pacf()
+  (c) KPSS Unit Root Test
+4. need to explain intuition of these functions
+
+## Random Forest 
+
+## Neural Network 
+
+

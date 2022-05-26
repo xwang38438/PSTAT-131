@@ -280,9 +280,12 @@ rf_final_fit <- fit(rf_final ,data = typeI_train)
 ```
 
 ```{r}
-#vip(rf_final_fit)
+rf_final_fit%>%
+  pull_workflow_fit()%>%
+  vip()
 ```
 
+**Solution: ** _sp_atk_ is the most useful and _legendary_ is the least useful as I expected. 
 
 ### Exercise 9
 
@@ -319,7 +322,7 @@ autoplot(boost_tune_res)
 
 What do you observe?
 
-The roc_auc increases sharply when _trees parameter_ reaches 2000.
+**Solution: **The roc_auc increases sharply when _trees parameter_ reaches 2000.
 
 
 What is the `roc_auc` of your best-performing boosted tree model on the folds? *Hint: Use `collect_metrics()` and `arrange()`.*
@@ -351,9 +354,6 @@ rf_final_fit <- fit(rf_final, data = typeI_train)
 rf_final_test = augment(rf_final_fit, new_data = typeI_test)
 ```
 
-```{r}
-rf_final_test
-```
 
 Print the AUC value of your best-performing model on the testing set. Print the ROC curves. Finally, create and visualize a confusion matrix heat map.
 
