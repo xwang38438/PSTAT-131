@@ -1,12 +1,15 @@
-Local Data:
-CALOSA7URN        Unemployment Rate in Los Angeles County, CA
-APUS49A72620_PCH  Average Price: Utility (Piped) Gas per Therm in Los Angeles-Long Beach-Anaheim, CA (CBSA)
-APUS49A72610_PCH  Average Price: Electricity per Kilowatt-Hour in Los Angeles-Long Beach-Anaheim, CA (CBSA)
-APUS49A7471A_CHG  Average Price: Gasoline, All Types (Cost per Gallon/3.785 Liters) in Los Angeles-Long Beach-Anaheim, CA (CBSA)
-CALOSA7LFN        Civilian Labor Force in Los Angeles County, CA
+All data below is monthly 
 
+unemploy_rate_la			Unemployment Rate in Los Angeles County, CA
+avg_price_gasolone_la 		Average Price: Utility (Piped) Gas per Therm in Los Angeles-Long Beach-Anaheim, CA (CBSA)
+avg_price_electr_kwh_La 	Average Price: Electricity per Kilowatt-Hour in Los Angeles-Long Beach-Anaheim, CA (CBSA)
+civilian_labor_force_la_pch 	Civilian Labor Force in Los Angeles County, CA
+new_private_housing_structure_issue_la
+					Number of new private housing issued in LA 
+home_price_index_la		The Home Price Index in LA 
+allemployee_..._la_pch              percentage change of number of employye in different industry in LA %
+pers_saving_rate_us 		personal saving rate in the US %
+X30_year_fixed_mortgage_us 	30 Year Mortgage Rate %
 
-
-
-_
+					
 
